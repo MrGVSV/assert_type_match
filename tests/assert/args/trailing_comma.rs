@@ -6,7 +6,7 @@ struct OtherType {
     y: i32,
 }
 
-#[assert_type_match(OtherType, test_only, )]
+#[assert_type_match(OtherType, test_only)]
 struct Test {
     x: i32,
     y: i32,

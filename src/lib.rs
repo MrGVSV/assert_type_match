@@ -1,11 +1,11 @@
 mod args;
 mod parse_bool;
 
+use crate::args::Args;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote, ToTokens};
-use syn::{parse_macro_input, Attribute, Data, DeriveInput, Field, Member};
 use syn::spanned::Spanned;
-use crate::args::Args;
+use syn::{parse_macro_input, Attribute, Data, DeriveInput, Field, Member};
 
 /// An attribute macro that can be used to statically verify that the annotated struct or enum
 /// matches the structure of a foreign type.
@@ -101,14 +101,23 @@ pub fn assert_type_match(args: TokenStream, input: TokenStream) -> TokenStream {
 
     if args.check_name() {
         let Some(segment) = foreign_ty.path.segments.last() else {
-            return syn::Error::new(foreign_ty.span(), "expected a type path").to_compile_error().into();
+            return syn::Error::new(foreign_ty.span(), "expected a type path")
+                .to_compile_error()
+                .into();
         };
 
         if &segment.ident != ident {
-            return syn::Error::new(ident.span(), format_args!("type name does not match: expected `{}`", segment.ident.to_string())).to_compile_error().into();
+            return syn::Error::new(
+                ident.span(),
+                format_args!(
+                    "type name does not match: expected `{}`",
+                    segment.ident.to_string()
+                ),
+            )
+            .to_compile_error()
+            .into();
         }
     }
-
 
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
@@ -127,9 +136,15 @@ pub fn assert_type_match(args: TokenStream, input: TokenStream) -> TokenStream {
             });
 
             let (fn_name, this_ty) = if args.skip_types() {
-                (format_ident!("__assert_untyped_fields_match"), foreign_ty.to_token_stream())
+                (
+                    format_ident!("__assert_untyped_fields_match"),
+                    foreign_ty.to_token_stream(),
+                )
             } else {
-                (format_ident!("__assert_typed_fields_match"), ident.to_token_stream())
+                (
+                    format_ident!("__assert_typed_fields_match"),
+                    ident.to_token_stream(),
+                )
             };
 
             quote! {
@@ -142,9 +157,15 @@ pub fn assert_type_match(args: TokenStream, input: TokenStream) -> TokenStream {
         }
         Data::Enum(data) => {
             let (fn_name, this_ty) = if args.skip_types() {
-                (format_ident!("__assert_untyped_variants_match"), foreign_ty.to_token_stream())
+                (
+                    format_ident!("__assert_untyped_variants_match"),
+                    foreign_ty.to_token_stream(),
+                )
             } else {
-                (format_ident!("__assert_typed_variants_match"), ident.to_token_stream())
+                (
+                    format_ident!("__assert_typed_variants_match"),
+                    ident.to_token_stream(),
+                )
             };
 
             let this_to_foreign = data.variants.iter().map(|variant| {
@@ -222,10 +243,14 @@ pub fn assert_type_match(args: TokenStream, input: TokenStream) -> TokenStream {
     output
 }
 
-fn extract_cfg_attrs(attrs: &[Attribute]) -> impl Iterator<Item=&Attribute> {
+fn extract_cfg_attrs(attrs: &[Attribute]) -> impl Iterator<Item = &Attribute> {
     attrs.iter().filter(|attr| attr.path().is_ident("cfg"))
 }
 
 fn create_member(field: &Field, index: usize) -> Member {
-    field.ident.clone().map(Member::from).unwrap_or_else(|| Member::from(index))
+    field
+        .ident
+        .clone()
+        .map(Member::from)
+        .unwrap_or_else(|| Member::from(index))
 }

@@ -4,7 +4,10 @@ enum OtherType {
     #[cfg(feature = "foo")]
     Unit,
     Tuple(i32, i32),
-    Struct { x: i32, y: i32 },
+    Struct {
+        x: i32,
+        y: i32,
+    },
 }
 
 #[assert_type_match(OtherType)]

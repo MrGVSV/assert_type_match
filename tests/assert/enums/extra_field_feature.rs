@@ -12,7 +12,11 @@ enum OtherType {
 enum Test {
     Unit,
     Tuple(i32, #[cfg(feature = "foo")] i32),
-    Struct { x: i32, #[cfg(feature = "foo")] y: i32 },
+    Struct {
+        x: i32,
+        #[cfg(feature = "foo")]
+        y: i32,
+    },
 }
 
 fn main() {}
