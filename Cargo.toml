@@ -5,6 +5,7 @@ authors = ["Gino Valente <gino.valente.code@gmail.com>"]
 description = "Statically assert that a type matches another type"
 keywords = ["template", "proc_macro", "procmacro"]
 edition = "2021"
+license = "MIT OR Apache-2.0"
 
 [lib]
 proc-macro = true
