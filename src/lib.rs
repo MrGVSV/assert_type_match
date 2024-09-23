@@ -109,10 +109,7 @@ pub fn assert_type_match(args: TokenStream, input: TokenStream) -> TokenStream {
         if &segment.ident != ident {
             return syn::Error::new(
                 ident.span(),
-                format_args!(
-                    "type name does not match: expected `{}`",
-                    segment.ident.to_string()
-                ),
+                format_args!("type name does not match: expected `{}`", segment.ident),
             )
             .to_compile_error()
             .into();
