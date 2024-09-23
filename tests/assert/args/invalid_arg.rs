@@ -6,7 +6,7 @@ struct OtherType {
 }
 
 #[assert_type_match(OtherType, foo)]
-//~^ ERROR: expected `test_only` or `check_name`
+//~^ ERROR: expected one of: `test_only`, `check_name`, `skip_types`
 struct Test {
     x: i32,
     y: i32,

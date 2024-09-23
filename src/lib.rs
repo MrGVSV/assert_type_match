@@ -2,7 +2,7 @@ mod args;
 mod parse_bool;
 
 use proc_macro::TokenStream;
-use quote::{format_ident, quote};
+use quote::{format_ident, quote, ToTokens};
 use syn::{parse_macro_input, Attribute, Data, DeriveInput, Field, Member};
 use syn::spanned::Spanned;
 use crate::args::Args;
@@ -39,6 +39,15 @@ use crate::args::Args;
 ///
 /// Controls whether the name of the annotated struct or enum should be compared to
 /// the name of the foreign type.
+///
+/// ## `skip_types`
+///
+/// Type: `bool`
+///
+/// Controls whether checking field types should be skipped.
+///
+/// For example, comparing `struct Foo(i32)` to `struct Foo(f32)` would pass
+/// when this argument is set to `true`.
 ///
 /// # Example
 ///
@@ -117,8 +126,14 @@ pub fn assert_type_match(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
             });
 
+            let (fn_name, this_ty) = if args.skip_types() {
+                (format_ident!("__assert_untyped_fields_match"), foreign_ty.to_token_stream())
+            } else {
+                (format_ident!("__assert_typed_fields_match"), ident.to_token_stream())
+            };
+
             quote! {
-                fn assert_type_matches #impl_generics(#this: #ident #ty_generics) -> #foreign_ty #ty_generics #where_clause {
+                fn #fn_name #impl_generics(#this: #this_ty #ty_generics) -> #foreign_ty #ty_generics #where_clause {
                      #foreign_ty {
                         #(#fields),*
                     }
@@ -126,6 +141,12 @@ pub fn assert_type_match(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         }
         Data::Enum(data) => {
+            let (fn_name, this_ty) = if args.skip_types() {
+                (format_ident!("__assert_untyped_variants_match"), foreign_ty.to_token_stream())
+            } else {
+                (format_ident!("__assert_typed_variants_match"), ident.to_token_stream())
+            };
+
             let this_to_foreign = data.variants.iter().map(|variant| {
                 let variant_ident = &variant.ident;
 
@@ -149,7 +170,7 @@ pub fn assert_type_match(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 quote! {
                     #( #attrs )*
-                    #ident::#variant_ident { #(#field_decls,)* .. } => #foreign_ty::#variant_ident { #(#field_ctors),* }
+                    #this_ty::#variant_ident { #(#field_decls,)* .. } => #foreign_ty::#variant_ident { #(#field_ctors),* }
                 }
             });
 
@@ -164,14 +185,14 @@ pub fn assert_type_match(args: TokenStream, input: TokenStream) -> TokenStream {
             });
 
             quote! {
-                fn assert_type_matches #impl_generics(#this: #ident #ty_generics) -> #foreign_ty #ty_generics #where_clause {
+                fn #fn_name #impl_generics(#this: #this_ty #ty_generics) -> #foreign_ty #ty_generics #where_clause {
                      match #this {
                         #(#this_to_foreign),*
                     }
                 }
 
                 // This test is needed to ensure that all variants in the foreign enum exist in the input enum
-                fn assert_all_variants_exist #impl_generics(#this: #foreign_ty #ty_generics) #where_clause {
+                fn __assert_all_variants_exist #impl_generics(#this: #foreign_ty #ty_generics) #where_clause {
                      match #this {
                         #(#foreign_to_this),*
                     }
