@@ -1,6 +1,10 @@
+mod args;
+mod parse_bool;
+
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, Attribute, Data, DeriveInput, Field, Member, TypePath};
+use syn::{parse_macro_input, Attribute, Data, DeriveInput, Field, Member};
+use crate::args::Args;
 
 /// An attribute macro that can be used to statically verify that the annotated struct or enum
 /// matches the structure of a foreign type.
@@ -11,6 +15,22 @@ use syn::{parse_macro_input, Attribute, Data, DeriveInput, Field, Member, TypePa
 /// For enums, it will verify that the variants of the annotated enum match the variants of the
 /// foreign enum, and that the fields of each variant match the fields of the corresponding variant
 /// in the foreign enum.
+///
+/// This will also output the original annotated struct or enum,
+/// unless the `test_only` argument is set to `true`.
+///
+/// # Arguments
+///
+/// This macro accepts arguments to control its behavior.
+/// These arguments are passed as a comma-separated list after the foreign type.
+///
+/// All boolean arguments may be set to true by using either the `foo` or `foo = true` syntax.
+///
+/// ## `test_only`
+///
+/// Type: `bool`
+///
+/// Controls whether to output the annotated struct or enum in the generated code.
 ///
 /// # Example
 ///
@@ -48,10 +68,17 @@ use syn::{parse_macro_input, Attribute, Data, DeriveInput, Field, Member, TypePa
 ///
 #[proc_macro_attribute]
 pub fn assert_type_match(args: TokenStream, input: TokenStream) -> TokenStream {
-    let mut original_input = input.clone();
+    let args = parse_macro_input!(args as Args);
+
+    let mut output = if args.test_only() {
+        TokenStream::new()
+    } else {
+        input.clone()
+    };
 
     let input = parse_macro_input!(input as DeriveInput);
-    let foreign_ty = parse_macro_input!(args as TypePath);
+
+    let foreign_ty = args.foreign_ty();
 
     let ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
@@ -136,9 +163,22 @@ pub fn assert_type_match(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     };
 
-    original_input.extend(TokenStream::from(assertions));
+    if args.test_only() {
+        output.extend(TokenStream::from(quote! {
+            const _: () = {
+                #input
+                #assertions
+            };
+        }));
+    } else {
+        output.extend(TokenStream::from(quote! {
+            const _: () = {
+                #assertions
+            };
+        }));
+    }
 
-    original_input
+    output
 }
 
 fn extract_cfg_attrs(attrs: &[Attribute]) -> impl Iterator<Item=&Attribute> {
