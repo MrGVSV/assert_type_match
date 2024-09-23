@@ -1,6 +1,6 @@
 [package]
 name = "assert_type_match"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Gino Valente <gino.valente.code@gmail.com>"]
 description = "Statically assert that a type matches another type"
