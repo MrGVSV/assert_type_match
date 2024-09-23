@@ -8,6 +8,7 @@ pub(crate) struct Args {
     test_only: Flag,
     skip_name: Flag,
     skip_types: Flag,
+    from: Flag,
 }
 
 impl Args {
@@ -19,6 +20,11 @@ impl Args {
     /// Controls whether to output the annotated struct or enum in the generated code.
     pub fn test_only(&self) -> bool {
         flag_to_bool(&self.test_only)
+    }
+
+    /// Controls whether a `From` implementation should be generated.
+    pub fn from(&self) -> bool {
+        flag_to_bool(&self.from)
     }
 
     /// Controls whether checking the name of the annotated struct or enum should be skipped.
@@ -43,6 +49,7 @@ impl Parse for Args {
             test_only: None,
             skip_name: None,
             skip_types: None,
+            from: None,
         };
 
         while input.peek(Token![,]) {
@@ -55,6 +62,8 @@ impl Parse for Args {
             let lookahead = input.lookahead1();
             if lookahead.peek(kw::test_only) {
                 this.test_only = input.parse_flag::<kw::test_only>()?;
+            } else if lookahead.peek(kw::from) {
+                this.from = input.parse_flag::<kw::from>()?;
             } else if lookahead.peek(kw::skip_name) {
                 this.skip_name = input.parse_flag::<kw::skip_name>()?;
             } else if lookahead.peek(kw::skip_types) {
@@ -72,4 +81,5 @@ mod kw {
     syn::custom_keyword!(test_only);
     syn::custom_keyword!(skip_name);
     syn::custom_keyword!(skip_types);
+    syn::custom_keyword!(from);
 }

@@ -64,3 +64,47 @@ pub(crate) fn struct_assert(
         }
     })
 }
+
+pub(crate) fn struct_from(
+    data: &DataStruct,
+    input: &DeriveInput,
+    args: &Args,
+) -> syn::Result<TokenStream> {
+    let ident = &input.ident;
+    let foreign_ty = args.foreign_ty();
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    let fields = data
+        .fields
+        .iter()
+        .enumerate()
+        .map(|(index, field)| {
+            let member = create_member(field, index);
+            let attrs = extract_cfg_attrs(&field.attrs);
+            quote! {
+                #( #attrs )*
+                #member: this.#member.into(),
+            }
+        })
+        .collect::<TokenStream>();
+
+    Ok(quote! {
+        impl #impl_generics ::core::convert::From<#ident #ty_generics> for #foreign_ty #ty_generics #where_clause {
+            #[inline]
+            fn from(this: #ident #ty_generics) -> Self {
+                Self {
+                    #fields
+                }
+            }
+        }
+
+        impl #impl_generics ::core::convert::From<#foreign_ty #ty_generics> for #ident #ty_generics #where_clause {
+            #[inline]
+            fn from(this: #foreign_ty #ty_generics) -> Self {
+                Self {
+                    #fields
+                }
+            }
+        }
+    })
+}

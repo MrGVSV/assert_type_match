@@ -48,6 +48,70 @@ pub(crate) fn enum_assert(
     })
 }
 
+pub(crate) fn enum_from(
+    data: &DataEnum,
+    input: &DeriveInput,
+    args: &Args,
+) -> syn::Result<TokenStream> {
+    let ident = &input.ident;
+    let foreign_ty = args.foreign_ty();
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    let make_match_arms = |from_ty: TokenStream| {
+        data.variants.iter().map(move |variant| {
+            let variant_ident = &variant.ident;
+            let attrs = extract_cfg_attrs(&variant.attrs);
+
+            let (field_decls, field_ctors) = variant
+                .fields
+                .iter()
+                .enumerate()
+                .map(|(index, field)| {
+                    let member = create_member(field, index);
+                    let attrs = extract_cfg_attrs(&field.attrs)
+                        .map(ToTokens::to_token_stream)
+                        .collect::<TokenStream>();
+
+                    let alias = format_ident!("__{}", member);
+
+                    (
+                        quote!(#attrs #member: #alias,),
+                        quote!(#attrs #member: #alias.into(),),
+                    )
+                })
+                .unzip::<_, _, TokenStream, TokenStream>();
+
+            quote! {
+                #( #attrs )*
+                #from_ty::#variant_ident { #field_decls .. } => Self::#variant_ident { #field_ctors }
+            }
+        })
+    };
+
+    let from_this = make_match_arms(ident.to_token_stream());
+    let from_foreign = make_match_arms(foreign_ty.to_token_stream());
+
+    Ok(quote! {
+        impl #impl_generics ::core::convert::From<#ident #ty_generics> for #foreign_ty #ty_generics #where_clause {
+            #[inline]
+            fn from(this: #ident #ty_generics) -> Self {
+                match this {
+                    #( #from_this ),*
+                }
+            }
+        }
+
+        impl #impl_generics ::core::convert::From<#foreign_ty #ty_generics> for #ident #ty_generics #where_clause {
+            #[inline]
+            fn from(this: #foreign_ty #ty_generics) -> Self {
+                match this {
+                    #( #from_foreign ),*
+                }
+            }
+        }
+    })
+}
+
 fn assert_fields_match(
     data: &DataEnum,
     foreign_ty: &TypePath,

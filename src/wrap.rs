@@ -1,4 +1,6 @@
 use crate::args::Args;
+use crate::enums::enum_from;
+use crate::structs::struct_from;
 use crate::ATTRIBUTE;
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
@@ -17,6 +19,11 @@ where
         Err(err) => return err.to_compile_error(),
     };
 
+    let from_impl = match generate_from(&input, &args) {
+        Ok(from_impl) => from_impl,
+        Err(err) => return err.to_compile_error(),
+    };
+
     let mut output = if args.test_only() {
         TokenStream::new()
     } else {
@@ -31,12 +38,14 @@ where
             const _: () = {
                 #input
                 #assertions
+                #from_impl
             };
         });
     } else {
         output.extend(quote! {
             const _: () = {
                 #assertions
+                #from_impl
             };
         });
     }
@@ -64,5 +73,20 @@ fn strip_assertion_attributes(input: &mut DeriveInput) {
             }
         }
         _ => {}
+    }
+}
+
+fn generate_from(input: &DeriveInput, args: &Args) -> syn::Result<TokenStream> {
+    if !args.from() {
+        return Ok(TokenStream::new());
+    }
+
+    match &input.data {
+        Data::Struct(data) => struct_from(data, input, args),
+        Data::Enum(data) => enum_from(data, input, args),
+        Data::Union(data) => Err(syn::Error::new(
+            data.union_token.span,
+            "unions are not supported",
+        )),
     }
 }

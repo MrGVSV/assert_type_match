@@ -8,7 +8,7 @@ mod other {
 }
 
 #[assert_type_match(other::Test, foo)]
-//~^ ERROR: expected one of: `test_only`, `skip_name`, `skip_types`
+//~^ ERROR: expected one of: `test_only`, `from`, `skip_name`, `skip_types`
 struct Test {
     x: i32,
     y: i32,

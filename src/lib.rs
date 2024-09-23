@@ -43,6 +43,16 @@ const ATTRIBUTE: &str = "assert_type_match";
 ///
 /// Controls whether to output the annotated struct or enum in the generated code.
 ///
+/// ## `from`
+///
+/// Type: `bool`
+///
+/// Controls whether a `From` implementation should be generated.
+///
+/// If true, two `From` implementations will be generated:
+/// one for converting from the annotated type to the foreign type,
+/// and one for converting from the foreign type to the annotated type.
+///
 /// ## `skip_name`
 ///
 /// Type: `bool`
