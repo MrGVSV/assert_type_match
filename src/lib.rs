@@ -1,7 +1,7 @@
 mod args;
 mod enums;
 mod fields;
-mod parse_bool;
+mod flags;
 mod structs;
 mod utils;
 mod wrap;

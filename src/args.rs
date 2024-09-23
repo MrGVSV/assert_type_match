@@ -1,13 +1,13 @@
-use crate::parse_bool::ParseBool;
+use crate::flags::{flag_to_bool, Flag, ParseFlag};
 use syn::parse::{Parse, ParseStream};
 use syn::{Token, TypePath};
 
 /// The arguments for the `assert_type_match` attribute macro.
 pub(crate) struct Args {
     foreign_ty: TypePath,
-    test_only: Option<bool>,
-    skip_name: Option<bool>,
-    skip_types: Option<bool>,
+    test_only: Flag,
+    skip_name: Flag,
+    skip_types: Flag,
 }
 
 impl Args {
@@ -18,17 +18,17 @@ impl Args {
 
     /// Controls whether to output the annotated struct or enum in the generated code.
     pub fn test_only(&self) -> bool {
-        self.test_only.unwrap_or_default()
+        flag_to_bool(&self.test_only)
     }
 
     /// Controls whether checking the name of the annotated struct or enum should be skipped.
     pub fn skip_name(&self) -> bool {
-        self.skip_name.unwrap_or_default()
+        flag_to_bool(&self.skip_name)
     }
 
     /// Controls whether checking field types should be skipped.
     pub fn skip_types(&self) -> bool {
-        self.skip_types.unwrap_or_default()
+        flag_to_bool(&self.skip_types)
     }
 }
 
@@ -54,11 +54,11 @@ impl Parse for Args {
 
             let lookahead = input.lookahead1();
             if lookahead.peek(kw::test_only) {
-                this.test_only = Some(input.parse_bool::<kw::test_only>()?);
+                this.test_only = input.parse_flag::<kw::test_only>()?;
             } else if lookahead.peek(kw::skip_name) {
-                this.skip_name = Some(input.parse_bool::<kw::skip_name>()?);
+                this.skip_name = input.parse_flag::<kw::skip_name>()?;
             } else if lookahead.peek(kw::skip_types) {
-                this.skip_types = Some(input.parse_bool::<kw::skip_types>()?);
+                this.skip_types = input.parse_flag::<kw::skip_types>()?;
             } else {
                 return Err(lookahead.error());
             }
