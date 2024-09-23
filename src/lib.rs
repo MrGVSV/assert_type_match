@@ -4,6 +4,7 @@ mod fields;
 mod flags;
 mod structs;
 mod utils;
+mod variants;
 mod wrap;
 
 use crate::args::Args;
@@ -80,6 +81,20 @@ const ATTRIBUTE: &str = "assert_type_match";
 /// Type: `bool`
 ///
 /// Controls whether checking the field type should be skipped.
+///
+/// ## Variant Arguments
+///
+/// This macro also supports variant attributes.
+///
+/// These are also defined with the `#[assert_type_match(...)]` attribute.
+///
+/// ### `skip`
+///
+/// Type: `bool`
+///
+/// Controls whether the variant should be skipped.
+///
+/// This allows you to skip variants that are not present on the foreign type.
 ///
 /// # Example
 ///

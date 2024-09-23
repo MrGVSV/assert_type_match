@@ -54,6 +54,10 @@ fn strip_assertion_attributes(input: &mut DeriveInput) {
         }
         Data::Enum(data) => {
             for variant in data.variants.iter_mut() {
+                variant
+                    .attrs
+                    .retain(|attr| !attr.path().is_ident(ATTRIBUTE));
+
                 for field in variant.fields.iter_mut() {
                     field.attrs.retain(|attr| !attr.path().is_ident(ATTRIBUTE));
                 }

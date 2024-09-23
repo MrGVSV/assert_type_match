@@ -1,4 +1,5 @@
 use crate::fields::FieldArgs;
+use crate::variants::VariantArgs;
 use crate::ATTRIBUTE;
 use syn::{Attribute, Field, Member};
 
@@ -12,6 +13,16 @@ pub(crate) fn extract_field_args(attrs: &[Attribute]) -> syn::Result<FieldArgs> 
 
     for attr in attrs.iter().filter(|attr| attr.path().is_ident(ATTRIBUTE)) {
         args = args.merge(attr.parse_args::<FieldArgs>()?)?;
+    }
+
+    Ok(args)
+}
+
+pub(crate) fn extract_variant_args(attrs: &[Attribute]) -> syn::Result<VariantArgs> {
+    let mut args = VariantArgs::default();
+
+    for attr in attrs.iter().filter(|attr| attr.path().is_ident(ATTRIBUTE)) {
+        args = args.merge(attr.parse_args::<VariantArgs>()?)?;
     }
 
     Ok(args)

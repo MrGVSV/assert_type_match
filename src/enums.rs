@@ -1,8 +1,10 @@
 use crate::args::Args;
-use crate::utils::{create_member, extract_cfg_attrs, extract_field_args, try_unzip};
+use crate::utils::{
+    create_member, extract_cfg_attrs, extract_field_args, extract_variant_args, try_unzip,
+};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
-use syn::{DataEnum, DeriveInput};
+use syn::{DataEnum, DeriveInput, Error, TypePath, Variant};
 
 pub(crate) fn enum_assert(
     data: &DataEnum,
@@ -27,10 +29,63 @@ pub(crate) fn enum_assert(
         )
     };
 
-    let this_to_foreign = data.variants.iter().map(|variant| {
-        let variant_ident = &variant.ident;
+    let this_to_foreign = assert_fields_match(data, foreign_ty, &this_ty)?;
+    let foreign_to_this = assert_variants_exist(data, foreign_ty)?;
 
-        let iter = variant.fields.iter().enumerate().filter_map(|(index, field)| {
+    Ok(quote! {
+        fn #fn_name #impl_generics(#this: #this_ty #ty_generics) -> #foreign_ty #ty_generics #where_clause {
+             match #this {
+                #this_to_foreign
+            }
+        }
+
+        // This test is needed to ensure that all variants in the foreign enum exist in the input enum
+        fn __assert_all_variants_exist #impl_generics(#this: #foreign_ty #ty_generics) #where_clause {
+             match #this {
+                #foreign_to_this
+            }
+        }
+    })
+}
+
+fn assert_fields_match(
+    data: &DataEnum,
+    foreign_ty: &TypePath,
+    this_ty: &TokenStream,
+) -> Result<TokenStream, Error> {
+    data.variants
+        .iter()
+        .map(|variant| {
+            let variant_ident = &variant.ident;
+            let attrs = extract_cfg_attrs(&variant.attrs);
+
+            let variant_args = extract_variant_args(&variant.attrs)?;
+
+            let (field_decls, field_ctors): (TokenStream, TokenStream) =
+                try_unzip(filter_fields(variant))?;
+
+            let ctor = if variant_args.skip() {
+                quote! { unreachable!() }
+            } else {
+                quote! {#foreign_ty::#variant_ident { #field_ctors }}
+            };
+
+            Ok(quote! {
+                #( #attrs )*
+                #this_ty::#variant_ident { #field_decls .. } => #ctor,
+            })
+        })
+        .collect::<syn::Result<TokenStream>>()
+}
+
+fn filter_fields(
+    variant: &Variant,
+) -> impl Iterator<Item = syn::Result<(TokenStream, TokenStream)>> + '_ {
+    variant
+        .fields
+        .iter()
+        .enumerate()
+        .filter_map(|(index, field)| {
             let member = create_member(field, index);
             let decl_attrs = extract_cfg_attrs(&field.attrs);
             let ctor_attrs = extract_cfg_attrs(&field.attrs);
@@ -53,46 +108,37 @@ pub(crate) fn enum_assert(
             };
 
             Some(Ok((
-                quote!(#( #decl_attrs )* #member: #alias),
+                quote!(#( #decl_attrs )* #member: #alias,),
                 quote! {
                     #( #ctor_attrs )*
-                    #member: #value
-                }
+                    #member: #value,
+                },
             )))
-        });
-
-        let (field_decls, field_ctors): (Vec<_>, Vec<_>) = try_unzip(iter)?;
-
-        let attrs = extract_cfg_attrs(&variant.attrs);
-
-        Ok(quote! {
-            #( #attrs )*
-            #this_ty::#variant_ident { #(#field_decls,)* .. } => #foreign_ty::#variant_ident { #(#field_ctors),* },
         })
-    }).collect::<syn::Result<TokenStream>>()?;
+}
 
-    let foreign_to_this = data.variants.iter().map(|variant| {
-        let variant_ident = &variant.ident;
-        let attrs = extract_cfg_attrs(&variant.attrs);
+fn assert_variants_exist(data: &DataEnum, foreign_ty: &TypePath) -> syn::Result<TokenStream> {
+    let foreign_to_this = data
+        .variants
+        .iter()
+        .filter_map(|variant| {
+            let variant_ident = &variant.ident;
+            let attrs = extract_cfg_attrs(&variant.attrs);
 
-        quote! {
-            #( #attrs )*
-            #foreign_ty::#variant_ident { .. } => {}
-        }
-    });
+            let variant_args = match extract_variant_args(&variant.attrs) {
+                Ok(args) => args,
+                Err(err) => return Some(Err(err)),
+            };
 
-    Ok(quote! {
-        fn #fn_name #impl_generics(#this: #this_ty #ty_generics) -> #foreign_ty #ty_generics #where_clause {
-             match #this {
-                #this_to_foreign
+            if variant_args.skip() {
+                return None;
             }
-        }
 
-        // This test is needed to ensure that all variants in the foreign enum exist in the input enum
-        fn __assert_all_variants_exist #impl_generics(#this: #foreign_ty #ty_generics) #where_clause {
-             match #this {
-                #(#foreign_to_this),*
-            }
-        }
-    })
+            Some(Ok(quote! {
+                #( #attrs )*
+                #foreign_ty::#variant_ident { .. } => {},
+            }))
+        })
+        .collect::<syn::Result<TokenStream>>()?;
+    Ok(foreign_to_this)
 }
