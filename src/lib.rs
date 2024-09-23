@@ -4,6 +4,7 @@ mod parse_bool;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{parse_macro_input, Attribute, Data, DeriveInput, Field, Member};
+use syn::spanned::Spanned;
 use crate::args::Args;
 
 /// An attribute macro that can be used to statically verify that the annotated struct or enum
@@ -31,6 +32,13 @@ use crate::args::Args;
 /// Type: `bool`
 ///
 /// Controls whether to output the annotated struct or enum in the generated code.
+///
+/// ## `check_name`
+///
+/// Type: `bool`
+///
+/// Controls whether the name of the annotated struct or enum should be compared to
+/// the name of the foreign type.
 ///
 /// # Example
 ///
@@ -81,6 +89,18 @@ pub fn assert_type_match(args: TokenStream, input: TokenStream) -> TokenStream {
     let foreign_ty = args.foreign_ty();
 
     let ident = &input.ident;
+
+    if args.check_name() {
+        let Some(segment) = foreign_ty.path.segments.last() else {
+            return syn::Error::new(foreign_ty.span(), "expected a type path").to_compile_error().into();
+        };
+
+        if &segment.ident != ident {
+            return syn::Error::new(ident.span(), format_args!("type name does not match: expected `{}`", segment.ident.to_string())).to_compile_error().into();
+        }
+    }
+
+
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     let this = format_ident!("this");

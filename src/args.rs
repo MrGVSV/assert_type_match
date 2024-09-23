@@ -6,6 +6,7 @@ use syn::{Token, TypePath};
 pub(crate) struct Args {
     foreign_ty: TypePath,
     test_only: Option<bool>,
+    check_name: Option<bool>,
 }
 
 impl Args {
@@ -18,6 +19,11 @@ impl Args {
     pub fn test_only(&self) -> bool {
         self.test_only.unwrap_or_default()
     }
+
+    /// Controls whether the name of the annotated struct or enum should be checked.
+    pub fn check_name(&self) -> bool {
+        self.check_name.unwrap_or_default()
+    }
 }
 
 impl Parse for Args {
@@ -29,6 +35,7 @@ impl Parse for Args {
         let mut this = Self {
             foreign_ty,
             test_only: None,
+            check_name: None,
         };
 
         while input.peek(Token![,]) {
@@ -41,6 +48,8 @@ impl Parse for Args {
             let lookahead = input.lookahead1();
             if lookahead.peek(kw::test_only) {
                 this.test_only = Some(input.parse_bool::<kw::test_only>()?);
+            } else if lookahead.peek(kw::check_name) {
+                this.check_name = Some(input.parse_bool::<kw::check_name>()?);
             } else {
                 return Err(lookahead.error());
             }
@@ -52,4 +61,5 @@ impl Parse for Args {
 
 mod kw {
     syn::custom_keyword!(test_only);
+    syn::custom_keyword!(check_name);
 }
