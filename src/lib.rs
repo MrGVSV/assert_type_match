@@ -38,12 +38,15 @@ use syn::{parse_macro_input, Data, DeriveInput};
 ///
 /// Controls whether to output the annotated struct or enum in the generated code.
 ///
-/// ## `check_name`
+/// ## `skip_name`
 ///
 /// Type: `bool`
 ///
-/// Controls whether the name of the annotated struct or enum should be compared to
-/// the name of the foreign type.
+/// Controls whether checking that the name of the annotated struct or enum matches
+/// the name of the foreign type should be skipped.
+///
+/// For example, comparing `struct Foo(u32)` to `struct Bar(u32)` would pass
+/// when this argument is set to `true`.
 ///
 /// ## `skip_types`
 ///
@@ -60,12 +63,14 @@ use syn::{parse_macro_input, Data, DeriveInput};
 ///
 /// ```
 /// # use assert_type_match::assert_type_match;
-/// struct OtherType {
-///     x: i32,
-///     y: i32,
+/// mod other {
+///     pub struct Test {
+///         pub x: i32,
+///         pub y: i32,
+///     }
 /// }
 ///
-/// #[assert_type_match(OtherType)]
+/// #[assert_type_match(other::Test)]
 /// struct Test {
 ///     x: i32,
 ///     y: i32,
@@ -76,15 +81,17 @@ use syn::{parse_macro_input, Data, DeriveInput};
 ///
 /// ```compile_fail
 /// # use assert_type_match::assert_type_match;
-/// struct OtherType {
-///     x: i32,
-///     y: i32,
+/// mod other {
+///     pub struct Test {
+///         pub x: i32,
+///         pub y: i32,
+///     }
 /// }
 ///
-/// #[assert_type_match(OtherType)]
+/// #[assert_type_match(other::Test)]
 /// struct Test {
 ///     x: i32,
-///     z: i32, // Error: struct `OtherType` has no field named `z`
+///     z: i32, // Error: struct `other::Test` has no field named `z`
 /// }
 /// ```
 ///
@@ -103,7 +110,7 @@ pub fn assert_type_match(args: TokenStream, input: TokenStream) -> TokenStream {
     let ident = &input.ident;
     let foreign_ty = args.foreign_ty();
 
-    if args.check_name() {
+    if !args.skip_name() {
         let Some(segment) = foreign_ty.path.segments.last() else {
             return syn::Error::new(foreign_ty.span(), "expected a type path")
                 .to_compile_error()

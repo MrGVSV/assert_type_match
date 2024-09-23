@@ -1,14 +1,16 @@
 use assert_type_match::assert_type_match;
 
-enum OtherType {
-    Unit,
-    Tuple(i32, i32),
-    Struct { x: i32, y: i32 },
+mod other {
+    pub enum Test {
+        Unit,
+        Tuple(i32, i32),
+        Struct { x: i32, y: i32 },
+    }
 }
 
-#[assert_type_match(OtherType)]
-//~^ ERROR: missing field `1` in initializer of `OtherType`
-//~| ERROR: missing field `y` in initializer of `OtherType`
+#[assert_type_match(other::Test)]
+//~^ ERROR: missing field `1` in initializer of `other::Test`
+//~| ERROR: missing field `y` in initializer of `other::Test`
 enum Test {
     Unit,
     Tuple(i32),

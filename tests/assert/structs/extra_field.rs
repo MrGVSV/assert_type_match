@@ -1,16 +1,18 @@
 use assert_type_match::assert_type_match;
 
-struct OtherType {
-    x: i32,
-    y: i32,
+mod other {
+    pub struct Test {
+        pub x: i32,
+        pub y: i32,
+    }
 }
 
-#[assert_type_match(OtherType)]
+#[assert_type_match(other::Test)]
 struct Test {
     x: i32,
     y: i32,
     z: i32,
-    //~^ ERROR: struct `OtherType` has no field named `z`
+    //~^ ERROR: struct `other::Test` has no field named `z`
 }
 
 fn main() {}

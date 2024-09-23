@@ -1,9 +1,11 @@
 use assert_type_match::assert_type_match;
 
-struct OtherType(i32, i32);
+mod other {
+    pub struct Test(pub i32, pub i32);
+}
 
-#[assert_type_match(OtherType)]
-//~^ ERROR: missing field `1` in initializer of `OtherType`
+#[assert_type_match(other::Test)]
+//~^ ERROR: missing field `1` in initializer of `other::Test`
 struct Test(i32, #[cfg(feature = "foo")] i32);
 
 fn main() {}
