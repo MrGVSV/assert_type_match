@@ -1,10 +1,14 @@
 use crate::args::Args;
-use crate::utils::{create_member, extract_cfg_attrs};
+use crate::utils::{create_member, extract_cfg_attrs, extract_field_args, try_unzip};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
 use syn::{DataEnum, DeriveInput};
 
-pub(crate) fn enum_assert(data: &DataEnum, input: &DeriveInput, args: &Args) -> TokenStream {
+pub(crate) fn enum_assert(
+    data: &DataEnum,
+    input: &DeriveInput,
+    args: &Args,
+) -> syn::Result<TokenStream> {
     let ident = &input.ident;
     let foreign_ty = args.foreign_ty();
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
@@ -26,29 +30,46 @@ pub(crate) fn enum_assert(data: &DataEnum, input: &DeriveInput, args: &Args) -> 
     let this_to_foreign = data.variants.iter().map(|variant| {
         let variant_ident = &variant.ident;
 
-        let (field_decls, field_ctors): (Vec<_>, Vec<_>) = variant.fields.iter().enumerate().map(|(index, field)| {
+        let iter = variant.fields.iter().enumerate().filter_map(|(index, field)| {
             let member = create_member(field, index);
             let decl_attrs = extract_cfg_attrs(&field.attrs);
             let ctor_attrs = extract_cfg_attrs(&field.attrs);
 
+            let field_args = match extract_field_args(&field.attrs) {
+                Ok(args) => args,
+                Err(err) => return Some(Err(err)),
+            };
+
+            if field_args.skip() {
+                return None;
+            }
+
             let alias = format_ident!("__{}", member);
 
-            (
+            let value = if field_args.skip_type() {
+                quote! { (|| { unreachable!() })() }
+            } else {
+                quote! { #alias }
+            };
+
+            Some(Ok((
                 quote!(#( #decl_attrs )* #member: #alias),
                 quote! {
                     #( #ctor_attrs )*
-                    #member: #alias
+                    #member: #value
                 }
-            )
-        }).unzip();
+            )))
+        });
+
+        let (field_decls, field_ctors): (Vec<_>, Vec<_>) = try_unzip(iter)?;
 
         let attrs = extract_cfg_attrs(&variant.attrs);
 
-        quote! {
+        Ok(quote! {
             #( #attrs )*
-            #this_ty::#variant_ident { #(#field_decls,)* .. } => #foreign_ty::#variant_ident { #(#field_ctors),* }
-        }
-    });
+            #this_ty::#variant_ident { #(#field_decls,)* .. } => #foreign_ty::#variant_ident { #(#field_ctors),* },
+        })
+    }).collect::<syn::Result<TokenStream>>()?;
 
     let foreign_to_this = data.variants.iter().map(|variant| {
         let variant_ident = &variant.ident;
@@ -60,10 +81,10 @@ pub(crate) fn enum_assert(data: &DataEnum, input: &DeriveInput, args: &Args) -> 
         }
     });
 
-    quote! {
+    Ok(quote! {
         fn #fn_name #impl_generics(#this: #this_ty #ty_generics) -> #foreign_ty #ty_generics #where_clause {
              match #this {
-                #(#this_to_foreign),*
+                #this_to_foreign
             }
         }
 
@@ -73,5 +94,5 @@ pub(crate) fn enum_assert(data: &DataEnum, input: &DeriveInput, args: &Args) -> 
                 #(#foreign_to_this),*
             }
         }
-    }
+    })
 }

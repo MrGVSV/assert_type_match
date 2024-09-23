@@ -1,16 +1,20 @@
 mod args;
 mod enums;
+mod fields;
 mod parse_bool;
 mod structs;
 mod utils;
+mod wrap;
 
 use crate::args::Args;
 use crate::enums::enum_assert;
 use crate::structs::struct_assert;
+use crate::wrap::wrap_assertions;
 use proc_macro::TokenStream;
-use quote::quote;
 use syn::spanned::Spanned;
 use syn::{parse_macro_input, Data, DeriveInput};
+
+const ATTRIBUTE: &str = "assert_type_match";
 
 /// An attribute macro that can be used to statically verify that the annotated struct or enum
 /// matches the structure of a foreign type.
@@ -57,6 +61,26 @@ use syn::{parse_macro_input, Data, DeriveInput};
 /// For example, comparing `struct Foo(i32)` to `struct Foo(f32)` would pass
 /// when this argument is set to `true`.
 ///
+/// ## Field Arguments
+///
+/// This macro also supports field attributes.
+///
+/// These are also defined with the `#[assert_type_match(...)]` attribute.
+///
+/// ### `skip`
+///
+/// Type: `bool`
+///
+/// Controls whether the field should be skipped.
+///
+/// This allows you to skip fields that are not present on the foreign type.
+///
+/// ### `skip_type`
+///
+/// Type: `bool`
+///
+/// Controls whether checking the field type should be skipped.
+///
 /// # Example
 ///
 /// A passing example:
@@ -97,60 +121,34 @@ use syn::{parse_macro_input, Data, DeriveInput};
 ///
 #[proc_macro_attribute]
 pub fn assert_type_match(args: TokenStream, input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
     let args = parse_macro_input!(args as Args);
 
-    let mut output = if args.test_only() {
-        TokenStream::new()
-    } else {
-        input.clone()
-    };
+    wrap_assertions(input, args, |input, args| {
+        let ident = &input.ident;
+        let foreign_ty = args.foreign_ty();
 
-    let input = parse_macro_input!(input as DeriveInput);
-
-    let ident = &input.ident;
-    let foreign_ty = args.foreign_ty();
-
-    if !args.skip_name() {
-        let Some(segment) = foreign_ty.path.segments.last() else {
-            return syn::Error::new(foreign_ty.span(), "expected a type path")
-                .to_compile_error()
-                .into();
-        };
-
-        if &segment.ident != ident {
-            return syn::Error::new(
-                ident.span(),
-                format_args!("type name does not match: expected `{}`", segment.ident),
-            )
-            .to_compile_error()
-            .into();
-        }
-    }
-
-    let assertions = match &input.data {
-        Data::Struct(data) => struct_assert(data, &input, &args),
-        Data::Enum(data) => enum_assert(data, &input, &args),
-        Data::Union(data) => {
-            return syn::Error::new(data.union_token.span, "unions are not supported")
-                .to_compile_error()
-                .into();
-        }
-    };
-
-    if args.test_only() {
-        output.extend(TokenStream::from(quote! {
-            const _: () = {
-                #input
-                #assertions
+        if !args.skip_name() {
+            let Some(segment) = foreign_ty.path.segments.last() else {
+                return Err(syn::Error::new(foreign_ty.span(), "expected a type path"));
             };
-        }));
-    } else {
-        output.extend(TokenStream::from(quote! {
-            const _: () = {
-                #assertions
-            };
-        }));
-    }
 
-    output
+            if &segment.ident != ident {
+                return Err(syn::Error::new(
+                    ident.span(),
+                    format_args!("type name does not match: expected `{}`", segment.ident),
+                ));
+            }
+        }
+
+        match &input.data {
+            Data::Struct(data) => struct_assert(data, input, args),
+            Data::Enum(data) => enum_assert(data, input, args),
+            Data::Union(data) => Err(syn::Error::new(
+                data.union_token.span,
+                "unions are not supported",
+            )),
+        }
+    })
+    .into()
 }
