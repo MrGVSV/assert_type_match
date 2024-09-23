@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/assert_type_match)](https://crates.io/crates/assert_type_match)
 [![Docs](https://img.shields.io/docsrs/assert_type_match)](https://docs.rs/assert_type_match/)
-[![License](https://img.shields.io/crates/l/assert_type_match)](./LICENSE.md)
+![License](https://img.shields.io/crates/l/assert_type_match)
 
 A niche utility macro to statically assert that a type matches another type.
 
