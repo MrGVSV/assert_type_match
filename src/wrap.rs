@@ -3,7 +3,8 @@ use crate::enums::enum_from;
 use crate::structs::struct_from;
 use crate::ATTRIBUTE;
 use proc_macro2::TokenStream;
-use quote::{quote, ToTokens};
+use quote::{format_ident, quote, ToTokens};
+use syn::spanned::Spanned;
 use syn::{Data, DeriveInput};
 
 /// Wraps the given assertions in a `const` block.
@@ -14,6 +15,14 @@ pub(crate) fn wrap_assertions<F>(mut input: DeriveInput, args: Args, f: F) -> To
 where
     F: FnOnce(&DeriveInput, &Args) -> syn::Result<TokenStream>,
 {
+    if let Err(error) = check_name(&mut input, &args) {
+        return error;
+    }
+
+    if args.test_only() {
+        input.ident = format_ident!("__Assert{}", input.ident);
+    }
+
     let assertions = match f(&input, &args) {
         Ok(assertions) => assertions,
         Err(err) => return err.to_compile_error(),
@@ -51,6 +60,29 @@ where
     }
 
     output
+}
+
+fn check_name(input: &mut DeriveInput, args: &Args) -> Result<(), TokenStream> {
+    let ident = &input.ident;
+    let foreign_ty = args.foreign_ty();
+
+    if !args.skip_name() {
+        let Some(segment) = foreign_ty.path.segments.last() else {
+            return Err(
+                syn::Error::new(foreign_ty.span(), "expected a type path").to_compile_error()
+            );
+        };
+
+        if &segment.ident != ident {
+            return Err(syn::Error::new(
+                ident.span(),
+                format_args!("type name does not match: expected `{}`", segment.ident),
+            )
+            .to_compile_error());
+        }
+    }
+
+    Ok(())
 }
 
 /// Removes all `assert_type_match` attributes from the given input.

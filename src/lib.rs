@@ -12,7 +12,6 @@ use crate::enums::enum_assert;
 use crate::structs::struct_assert;
 use crate::wrap::wrap_assertions;
 use proc_macro::TokenStream;
-use syn::spanned::Spanned;
 use syn::{parse_macro_input, Data, DeriveInput};
 
 const ATTRIBUTE: &str = "assert_type_match";
@@ -149,31 +148,13 @@ pub fn assert_type_match(args: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let args = parse_macro_input!(args as Args);
 
-    wrap_assertions(input, args, |input, args| {
-        let ident = &input.ident;
-        let foreign_ty = args.foreign_ty();
-
-        if !args.skip_name() {
-            let Some(segment) = foreign_ty.path.segments.last() else {
-                return Err(syn::Error::new(foreign_ty.span(), "expected a type path"));
-            };
-
-            if &segment.ident != ident {
-                return Err(syn::Error::new(
-                    ident.span(),
-                    format_args!("type name does not match: expected `{}`", segment.ident),
-                ));
-            }
-        }
-
-        match &input.data {
-            Data::Struct(data) => struct_assert(data, input, args),
-            Data::Enum(data) => enum_assert(data, input, args),
-            Data::Union(data) => Err(syn::Error::new(
-                data.union_token.span,
-                "unions are not supported",
-            )),
-        }
+    wrap_assertions(input, args, |input, args| match &input.data {
+        Data::Struct(data) => struct_assert(data, input, args),
+        Data::Enum(data) => enum_assert(data, input, args),
+        Data::Union(data) => Err(syn::Error::new(
+            data.union_token.span,
+            "unions are not supported",
+        )),
     })
     .into()
 }
