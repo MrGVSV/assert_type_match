@@ -1,11 +1,16 @@
 mod args;
+mod enums;
 mod parse_bool;
+mod structs;
+mod utils;
 
 use crate::args::Args;
+use crate::enums::enum_assert;
+use crate::structs::struct_assert;
 use proc_macro::TokenStream;
-use quote::{format_ident, quote, ToTokens};
+use quote::quote;
 use syn::spanned::Spanned;
-use syn::{parse_macro_input, Attribute, Data, DeriveInput, Field, Member};
+use syn::{parse_macro_input, Data, DeriveInput};
 
 /// An attribute macro that can be used to statically verify that the annotated struct or enum
 /// matches the structure of a foreign type.
@@ -95,9 +100,8 @@ pub fn assert_type_match(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let input = parse_macro_input!(input as DeriveInput);
 
-    let foreign_ty = args.foreign_ty();
-
     let ident = &input.ident;
+    let foreign_ty = args.foreign_ty();
 
     if args.check_name() {
         let Some(segment) = foreign_ty.path.segments.last() else {
@@ -116,109 +120,13 @@ pub fn assert_type_match(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     }
 
-    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-
-    let this = format_ident!("this");
-
     let assertions = match &input.data {
-        Data::Struct(data) => {
-            let fields = data.fields.iter().enumerate().map(|(index, field)| {
-                let member = create_member(field, index);
-                let attrs = extract_cfg_attrs(&field.attrs);
-
-                quote! {
-                    #( #attrs )*
-                    #member: #this.#member
-                }
-            });
-
-            let (fn_name, this_ty) = if args.skip_types() {
-                (
-                    format_ident!("__assert_untyped_fields_match"),
-                    foreign_ty.to_token_stream(),
-                )
-            } else {
-                (
-                    format_ident!("__assert_typed_fields_match"),
-                    ident.to_token_stream(),
-                )
-            };
-
-            quote! {
-                fn #fn_name #impl_generics(#this: #this_ty #ty_generics) -> #foreign_ty #ty_generics #where_clause {
-                     #foreign_ty {
-                        #(#fields),*
-                    }
-                }
-            }
-        }
-        Data::Enum(data) => {
-            let (fn_name, this_ty) = if args.skip_types() {
-                (
-                    format_ident!("__assert_untyped_variants_match"),
-                    foreign_ty.to_token_stream(),
-                )
-            } else {
-                (
-                    format_ident!("__assert_typed_variants_match"),
-                    ident.to_token_stream(),
-                )
-            };
-
-            let this_to_foreign = data.variants.iter().map(|variant| {
-                let variant_ident = &variant.ident;
-
-                let (field_decls, field_ctors): (Vec<_>, Vec<_>) = variant.fields.iter().enumerate().map(|(index, field)| {
-                    let member = create_member(field, index);
-                    let decl_attrs = extract_cfg_attrs(&field.attrs);
-                    let ctor_attrs = extract_cfg_attrs(&field.attrs);
-
-                    let alias = format_ident!("__{}", member);
-
-                    (
-                        quote!(#( #decl_attrs )* #member: #alias),
-                        quote! {
-                            #( #ctor_attrs )*
-                            #member: #alias
-                        }
-                    )
-                }).unzip();
-
-                let attrs = extract_cfg_attrs(&variant.attrs);
-
-                quote! {
-                    #( #attrs )*
-                    #this_ty::#variant_ident { #(#field_decls,)* .. } => #foreign_ty::#variant_ident { #(#field_ctors),* }
-                }
-            });
-
-            let foreign_to_this = data.variants.iter().map(|variant| {
-                let variant_ident = &variant.ident;
-                let attrs = extract_cfg_attrs(&variant.attrs);
-
-                quote! {
-                    #( #attrs )*
-                    #foreign_ty::#variant_ident { .. } => {}
-                }
-            });
-
-            quote! {
-                fn #fn_name #impl_generics(#this: #this_ty #ty_generics) -> #foreign_ty #ty_generics #where_clause {
-                     match #this {
-                        #(#this_to_foreign),*
-                    }
-                }
-
-                // This test is needed to ensure that all variants in the foreign enum exist in the input enum
-                fn __assert_all_variants_exist #impl_generics(#this: #foreign_ty #ty_generics) #where_clause {
-                     match #this {
-                        #(#foreign_to_this),*
-                    }
-                }
-            }
-        }
+        Data::Struct(data) => struct_assert(data, &input, &args),
+        Data::Enum(data) => enum_assert(data, &input, &args),
         Data::Union(data) => {
-            syn::Error::new(data.union_token.span, "unions are not supported").to_compile_error()
+            return syn::Error::new(data.union_token.span, "unions are not supported")
+                .to_compile_error()
+                .into();
         }
     };
 
@@ -238,16 +146,4 @@ pub fn assert_type_match(args: TokenStream, input: TokenStream) -> TokenStream {
     }
 
     output
-}
-
-fn extract_cfg_attrs(attrs: &[Attribute]) -> impl Iterator<Item = &Attribute> {
-    attrs.iter().filter(|attr| attr.path().is_ident("cfg"))
-}
-
-fn create_member(field: &Field, index: usize) -> Member {
-    field
-        .ident
-        .clone()
-        .map(Member::from)
-        .unwrap_or_else(|| Member::from(index))
 }
